@@ -606,6 +606,53 @@ test('TypedDict doc string', async () => {
     });
 });
 
+describe.each(['', 'implementation'])(
+    'overloaded function call hover (implementation docstring: %j)',
+    (implementation) => {
+        test.each<[string, string | undefined]>([
+            ['int', 'int overload'],
+            ['str', 'str overload'],
+            ['bytes', undefined],
+        ])('uses the matched overload docstring (%s)', (type, docString) => {
+            const code = `
+// @filename: test.py
+//// from typing import overload
+////
+//// @overload
+//// def fun(a: int) -> int:
+////     """int overload"""
+//// @overload
+//// def fun(a: str) -> str:
+////     """str overload"""
+//// @overload
+//// def fun(a: bytes) -> bytes:
+////     ...
+//// def fun(a: int | bytes | str) -> int | bytes | str:
+////     ${implementation ? '"""' + implementation + '"""' : ''}
+////     return a
+////
+//// _ = [|/*int*/fun|](1)
+//// _ = [|/*str*/fun|]("")
+//// _ = [|/*bytes*/fun|](b"")
+//// [|/*reference*/fun|]
+        `;
+
+            const state = parseAndGetTestState(code).state;
+            const marker = state.getMarkerByName(type);
+            state.openFile(marker.fileName);
+
+            const expectedDocString = docString ?? implementation;
+            state.verifyHover('markdown', {
+                [type]:
+                    `\`\`\`python\n(function) def fun(a: ${type}) -> ${type}\n\`\`\`` +
+                    (expectedDocString ? '\n---\n' + expectedDocString : ''),
+                reference:
+                    '```python\n(function)\ndef fun(a: int) -> int: ...\ndef fun(a: str) -> str: ...\ndef fun(a: bytes) -> bytes: ...\n```\n---\nint overload',
+            });
+        });
+    }
+);
+
 test('hover on class Foo and its __call__ method with overloads', async () => {
     const code = `
 // @filename: test.py

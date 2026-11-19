@@ -70,14 +70,14 @@ export function isInheritedFromBuiltin(type: FunctionType | OverloadedType, clas
 // These implement the docstring-resolution-order spec and are the single source
 // of ordering for every callable docstring surface (functions, methods, overloads,
 // constructors). They operate on the FULL member symbol plus the call-matched
-// overload(s) so that Rule A (matched overload -> implementation -> other overloads)
+// overload(s) so that Rule A (matched overload -> implementation, or all overloads when no match is known)
 // applies uniformly, and they walk the MRO (derived-first, excluding builtin bases
 // but always considering the class itself) for inheritance. Stub->source fallback
 // is centralized in _functionDocInfo via _getFunctionDocStringFromDeclarationInfo.
 // ===========================================================================
 
-// Rule A within one class's member: matched overload -> implementation -> other
-// overloads (declaration order). Returns the first candidate that has a docstring.
+// Rule A within one class's member: matched overload -> implementation, or all overloads
+// (declaration order) when no match is known. Returns the first candidate that has a docstring.
 function _selectMemberDocInfo(
     memberType: Type,
     matchedOverloads: FunctionType[] | undefined,
@@ -93,6 +93,7 @@ function _selectMemberDocInfo(
 
     const overloads = OverloadedType.getOverloads(memberType);
     const impl = OverloadedType.getImplementation(memberType);
+    let hasMatchedOverload = false;
 
     // Tier 1: the call-matched overload(s). First read the matched overload's OWN docstring
     // directly; this is robust to declaration-cleared specializations (e.g. a ParamSpec/Callable
@@ -110,6 +111,7 @@ function _selectMemberDocInfo(
             if (memberName !== undefined && matched.shared.name !== memberName) {
                 continue;
             }
+            hasMatchedOverload = true;
             const info = _functionDocInfo(matched, sourceMapper);
             if (info) {
                 return info;
@@ -133,7 +135,12 @@ function _selectMemberDocInfo(
         }
     }
 
-    // Tier 3: the remaining overloads, in declaration order.
+    // Do not borrow documentation from an unrelated overload when a match is known.
+    if (hasMatchedOverload) {
+        return undefined;
+    }
+
+    // Tier 3: when no match is known, try all overloads in declaration order.
     for (const overload of overloads) {
         const info = _functionDocInfo(overload, sourceMapper);
         if (info) {
