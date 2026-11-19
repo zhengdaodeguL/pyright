@@ -2273,6 +2273,12 @@ test('TryExcept12', () => {
     TestUtils.validateResults(analysisResults2, 1);
 });
 
+test('TryFinallyLoopPerformance', () => {
+    const analysisResults = TestUtils.typeAnalyzeSampleFiles(['tryFinallyLoopPerformance.py']);
+
+    TestUtils.validateResults(analysisResults, 0, 9);
+});
+
 test('exceptionGroup1', () => {
     const configOptions = new ConfigOptions(Uri.empty());
 
